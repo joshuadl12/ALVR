@@ -9,7 +9,11 @@ use alvr_common::{
     glam::{Quat, Vec2, Vec3},
     log,
     prelude::*,
+<<<<<<< HEAD
     ALVR_NAME, ALVR_VERSION,
+=======
+    Haptics, ALVR_NAME, ALVR_VERSION, LEFT_HAND_HAPTIC_ID,
+>>>>>>> libalvr
 };
 use alvr_session::{CodecType, SessionDesc, TrackingSpace};
 use alvr_sockets::{
@@ -473,6 +477,7 @@ async fn connection_pipeline(
             .await?;
         async move {
             loop {
+<<<<<<< HEAD
                 let packet = receiver.recv().await?.header;
 
                 unsafe {
@@ -482,6 +487,21 @@ async fn connection_pipeline(
                         packet.frequency,
                         packet.amplitude,
                     )
+=======
+                let packet = receiver.recv().await?;
+
+                let haptics = HapticsFeedback {
+                    type_: 13, // ALVR_PACKET_TYPE_HAPTICS
+                    startTime: 0,
+                    amplitude: packet.header.amplitude,
+                    duration: packet.header.duration.as_secs_f32(),
+                    frequency: packet.header.frequency,
+                    hand: if packet.header.path == *LEFT_HAND_HAPTIC_ID {
+                        0
+                    } else {
+                        1
+                    },
+>>>>>>> libalvr
                 };
             }
         }

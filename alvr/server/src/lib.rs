@@ -1,7 +1,8 @@
+pub mod capi;
 mod connection;
 mod connection_utils;
 mod dashboard;
-mod graphics_info;
+mod graphics;
 mod logging_backend;
 mod web_server;
 
@@ -12,13 +13,12 @@ mod bindings {
 use bindings::*;
 
 use alvr_common::{
-    lazy_static, log, prelude::*, LEFT_CONTROLLER_HAPTIC_ID, RIGHT_CONTROLLER_HAPTIC_ID,
+    lazy_static, log, prelude::*, Haptics, LEFT_HAND_HAPTIC_ID, RIGHT_HAND_HAPTIC_ID,
 };
 use alvr_filesystem::{self as afs, Layout};
-use alvr_session::{
-    ClientConnectionDesc, OpenvrPropValue, OpenvrPropertyKey, ServerEvent, SessionManager,
-};
-use alvr_sockets::{Haptics, TimeSyncPacket, VideoFrameHeaderPacket};
+use alvr_session::{ClientConnectionDesc, ServerEvent, SessionManager};
+use alvr_sockets::{TimeSyncPacket, VideoFrameHeaderPacket};
+use capi::{AlvrEvent, AlvrEventData, AlvrEventType, DRIVER_EVENT_SENDER};
 use parking_lot::Mutex;
 use std::{
     collections::{hash_map::Entry, HashSet},
@@ -49,8 +49,7 @@ lazy_static! {
 
     static ref VIDEO_SENDER: Mutex<Option<mpsc::UnboundedSender<(VideoFrameHeaderPacket, Vec<u8>)>>> =
         Mutex::new(None);
-    static ref HAPTICS_SENDER: Mutex<Option<mpsc::UnboundedSender<Haptics>>> =
-        Mutex::new(None);
+    static ref HAPTICS_SENDER: Mutex<Option<mpsc::UnboundedSender<Haptics>>> = Mutex::new(None);
     static ref TIME_SYNC_SENDER: Mutex<Option<mpsc::UnboundedSender<TimeSyncPacket>>> =
         Mutex::new(None);
 
@@ -139,6 +138,15 @@ pub fn notify_shutdown_driver() {
         shutdown_runtime();
 
         unsafe { ShutdownSteamvr() };
+
+        if let Some(sender) = &*DRIVER_EVENT_SENDER.lock() {
+            sender
+                .send(AlvrEvent {
+                    ty: AlvrEventType::ALVR_EVENT_TYPE_SHUTDOWN_REQUESTED,
+                    data: AlvrEventData { none: () },
+                })
+                .ok();
+        }
     });
 }
 
@@ -324,10 +332,14 @@ pub unsafe extern "C" fn HmdDriverFactory(
     extern "C" fn haptics_send(path: u64, duration_s: f32, frequency: f32, amplitude: f32) {
         if let Some(sender) = &*HAPTICS_SENDER.lock() {
             let haptics = Haptics {
-                path,
-                duration: Duration::from_secs_f32(duration_s),
-                frequency,
-                amplitude,
+                path: if haptics.hand == 0 {
+                    *LEFT_HAND_HAPTIC_ID
+                } else {
+                    *RIGHT_HAND_HAPTIC_ID
+                },
+                duration: Duration::from_secs_f32(haptics.duration),
+                frequency: haptics.frequency,
+                amplitude: haptics.amplitude,
             };
 
             sender.send(haptics).ok();

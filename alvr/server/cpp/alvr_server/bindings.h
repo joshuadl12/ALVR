@@ -184,7 +184,7 @@ extern "C" void (*HapticsSend)(unsigned long long path,
                                float amplitude);
 extern "C" void (*TimeSyncSend)(TimeSync packet);
 extern "C" void (*ShutdownRuntime)();
-extern "C" unsigned long long (*PathStringToHash)(const char *path);
+extern "C" void (*RenderingStatistics)(float *render_ms, float *idle_ms, float *wait_ms);
 
 extern "C" void *CppEntryPoint(const char *pInterfaceName, int *pReturnCode);
 extern "C" void InitializeStreaming();
@@ -201,6 +201,24 @@ extern "C" void TimeSyncReceive(TimeSync data);
 extern "C" void VideoErrorReportReceive();
 extern "C" void ShutdownSteamvr();
 
-extern "C" void SetOpenvrProperty(unsigned long long topLevelPath, OpenvrProperty prop);
-extern "C" void SetViewsConfig(ViewsConfigData config);
-extern "C" void SetBattery(unsigned long long topLevelPath, float gauge_value, bool is_plugged);
+struct LayerView {
+    unsigned long long texture_id;
+    TrackingQuat orientation;
+    TrackingVector2 rect_offset;
+    TrackingVector2 rect_size;
+    // todo: this should include fov. the compositor should take into account fov.
+};
+
+struct Layer {
+    LayerView views[2];
+};
+
+extern "C" void CppInit();
+extern "C" unsigned long long CreateTexture(unsigned int width,
+                                            unsigned int height,
+                                            unsigned int format,
+                                            unsigned int sampleCount,
+                                            void *texture);
+extern "C" void DestroyTexture(unsigned long long id);
+extern "C" void
+PresentLayers(void *syncTexture, const Layer *layers, unsigned long long layer_count);

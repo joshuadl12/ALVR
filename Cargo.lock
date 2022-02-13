@@ -237,6 +237,34 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
+=======
+name = "alvr_mock_driver"
+version = "0.1.0"
+dependencies = [
+ "alvr_server",
+]
+
+[[package]]
+name = "alvr_mock_driver_old"
+version = "0.1.0"
+dependencies = [
+ "alvr_common",
+ "alvr_ipc",
+]
+
+[[package]]
+name = "alvr_openvr_driver"
+version = "0.1.0"
+dependencies = [
+ "bindgen 0.59.2",
+ "cbindgen",
+ "cc",
+ "regex",
+]
+
+[[package]]
+>>>>>>> libalvr
 name = "alvr_server"
 version = "17.0.0-dev.6"
 dependencies = [
@@ -638,6 +666,25 @@ name = "cassowary"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df8670b8c7b9dae1793364eafadf7239c40d669904660c5960d74cfd80b46a53"
+
+[[package]]
+name = "cbindgen"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51e3973b165dc0f435831a9e426de67e894de532754ff7a3f307c03ee5dec7dc"
+dependencies = [
+ "clap",
+ "heck",
+ "indexmap",
+ "log",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn",
+ "tempfile",
+ "toml",
+]
 
 [[package]]
 name = "cc"
@@ -3340,6 +3387,30 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
+=======
+name = "openvr-driver-sys"
+version = "0.1.0+1.16.8"
+dependencies = [
+ "bindgen 0.59.2",
+ "cc",
+ "regex",
+]
+
+[[package]]
+name = "openvr_driver_old"
+version = "0.1.0"
+dependencies = [
+ "alvr_common",
+ "alvr_ipc",
+ "bindgen 0.59.2",
+ "cc",
+ "parking_lot 0.12.0",
+ "regex",
+]
+
+[[package]]
+>>>>>>> libalvr
 name = "openxr"
 version = "0.15.5"
 source = "git+https://github.com/zarik5/openxrs#ca06a64557abc94559bdb30ceafb51b031e5ac9a"

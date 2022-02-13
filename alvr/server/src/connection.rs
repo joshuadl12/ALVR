@@ -1,4 +1,9 @@
 use crate::{
+    capi::{
+        to_capi_quat, to_capi_vec3, AlvrBatteryValue, AlvrDevicePose, AlvrDeviceProfile, AlvrEvent,
+        AlvrEventData, AlvrEventType, AlvrFov, AlvrMotionData, AlvrQuat, AlvrVec3, AlvrVideoConfig,
+        AlvrViewsConfig, DRIVER_EVENT_SENDER,
+    },
     connection_utils, ClientListAction, EyeFov, TimeSync, TrackingInfo, TrackingInfo_Controller,
     TrackingInfo_Controller__bindgen_ty_1, TrackingQuat, TrackingVector3, CLIENTS_UPDATED_NOTIFIER,
     HAPTICS_SENDER, RESTART_NOTIFIER, SESSION_MANAGER, TIME_SYNC_SENDER, VIDEO_SENDER,
@@ -9,7 +14,7 @@ use alvr_common::{
     log,
     prelude::*,
     semver::Version,
-    HEAD_ID, LEFT_HAND_ID, RIGHT_HAND_ID,
+    Fov, MotionData, HEAD_ID, LEFT_HAND_ID, RIGHT_HAND_ID,
 };
 use alvr_session::{
     CodecType, FrameSize, OpenvrConfig, OpenvrPropValue, OpenvrPropertyKey, ServerEvent,
@@ -22,9 +27,12 @@ use alvr_sockets::{
 use futures::future::{BoxFuture, Either};
 use settings_schema::Switch;
 use std::{
+    f32::consts::PI,
+    ffi::CString,
     future,
     net::IpAddr,
     process::Command,
+    ptr,
     str::FromStr,
     sync::{mpsc as smpsc, Arc},
     thread,
@@ -582,7 +590,8 @@ async fn connection_pipeline() -> StrResult {
         }
     }
 
-    let settings = SESSION_MANAGER.lock().get().to_settings();
+    let session = SESSION_MANAGER.lock().get().clone();
+    let settings = session.to_settings();
 
     let stream_socket = tokio::select! {
         res = StreamSocketBuilder::connect_to_client(
@@ -613,6 +622,61 @@ async fn connection_pipeline() -> StrResult {
         }
     }
 
+    if let Some(sender) = &*DRIVER_EVENT_SENDER.lock() {
+        sender
+            .send(AlvrEvent {
+                ty: AlvrEventType::ALVR_EVENT_TYPE_DEVICE_CONNECTED,
+                data: AlvrEventData {
+                    device_profile: AlvrDeviceProfile {
+                        top_level_path: *HEAD_ID,
+                        interaction_profile: 0, // head has no interaction profile
+                    },
+                },
+            })
+            .unwrap();
+
+        sender
+            .send(AlvrEvent {
+                ty: AlvrEventType::ALVR_EVENT_TYPE_VIDEO_CONFIG_UPDATED,
+                data: AlvrEventData {
+                    video_config: AlvrVideoConfig {
+                        preferred_view_width: session.openvr_config.eye_resolution_width,
+                        preferred_view_height: session.openvr_config.eye_resolution_height,
+                    },
+                },
+            })
+            .unwrap();
+
+        // if let Switch::Enabled(controllers) = settings.headset.controllers {
+        //     let interaction_profile =
+        //         alvr_common::hash_string("/interaction_profiles/oculus/touch_controller");
+
+        //     sender
+        //         .send(AlvrEvent {
+        //             ty: AlvrEventType::ALVR_EVENT_TYPE_DEVICE_CONNECTED,
+        //             data: AlvrEventData {
+        //                 device_profile: AlvrDeviceProfile {
+        //                     top_level_path: *LEFT_HAND_ID,
+        //                     interaction_profile,
+        //                 },
+        //             },
+        //         })
+        //         .unwrap();
+
+        //     sender
+        //         .send(AlvrEvent {
+        //             ty: AlvrEventType::ALVR_EVENT_TYPE_DEVICE_CONNECTED,
+        //             data: AlvrEventData {
+        //                 device_profile: AlvrDeviceProfile {
+        //                     top_level_path: *RIGHT_HAND_ID,
+        //                     interaction_profile,
+        //                 },
+        //             },
+        //         })
+        //         .unwrap();
+        // }
+    }
+
     unsafe { crate::InitializeStreaming() };
     let _stream_guard = StreamCloseGuard;
 
@@ -623,39 +687,23 @@ async fn connection_pipeline() -> StrResult {
         let mute_when_streaming = desc.mute_when_streaming;
 
         Box::pin(async move {
-            #[cfg(windows)]
-            unsafe {
-                let device_id = alvr_audio::get_windows_device_id(&device)?;
-                crate::SetOpenvrProperty(
-                    *HEAD_ID,
-                    crate::to_cpp_openvr_prop(
-                        OpenvrPropertyKey::AudioDefaultPlaybackDeviceId,
-                        OpenvrPropValue::String(device_id),
-                    ),
-                )
-            }
+            // #[cfg(windows)]
+            // crate::openvr::set_game_output_audio_device_id(alvr_audio::get_windows_device_id(
+            //     &device,
+            // )?);
 
             alvr_audio::record_audio_loop(device, 2, sample_rate, mute_when_streaming, sender)
                 .await?;
 
-            #[cfg(windows)]
-            {
-                let default_device = AudioDevice::new(
-                    alvr_session::AudioDeviceId::Default,
-                    AudioDeviceType::Output,
-                )?;
-                let default_device_id = alvr_audio::get_windows_device_id(&default_device)?;
-
-                unsafe {
-                    crate::SetOpenvrProperty(
-                        *HEAD_ID,
-                        crate::to_cpp_openvr_prop(
-                            OpenvrPropertyKey::AudioDefaultPlaybackDeviceId,
-                            OpenvrPropValue::String(default_device_id),
-                        ),
-                    )
-                }
-            }
+            // #[cfg(windows)]
+            // {
+            //     let default_device = AudioDevice::new(
+            //         alvr_session::AudioDeviceId::Default,
+            //         AudioDeviceType::Output,
+            //     )?;
+            //     let default_device_id = alvr_audio::get_windows_device_id(&default_device)?;
+            //     crate::openvr::set_game_output_audio_device_id(default_device_id);
+            // }
 
             Ok(())
         })
@@ -670,25 +718,17 @@ async fn connection_pipeline() -> StrResult {
         )?;
         let receiver = stream_socket.subscribe_to_stream(AUDIO).await?;
 
-        #[cfg(windows)]
-        {
-            let microphone_device = AudioDevice::new(
-                desc.output_device_id,
-                AudioDeviceType::VirtualMicrophoneOutput {
-                    matching_input_device_name: input_device.name()?,
-                },
-            )?;
-            let microphone_device_id = alvr_audio::get_windows_device_id(&microphone_device)?;
-            unsafe {
-                crate::SetOpenvrProperty(
-                    *HEAD_ID,
-                    crate::to_cpp_openvr_prop(
-                        OpenvrPropertyKey::AudioDefaultRecordingDeviceId,
-                        OpenvrPropValue::String(microphone_device_id),
-                    ),
-                )
-            }
-        }
+        // #[cfg(windows)]
+        // {
+        //     let microphone_device = AudioDevice::new(
+        //         desc.output_device_id,
+        //         AudioDeviceType::VirtualMicrophoneOutput {
+        //             matching_input_device_name: input_device.name()?,
+        //         },
+        //     )?;
+        //     let microphone_device_id = alvr_audio::get_windows_device_id(&microphone_device)?;
+        //     crate::openvr::set_headset_microphone_audio_device_id(microphone_device_id);
+        // }
 
         Box::pin(alvr_audio::play_audio_loop(
             input_device,
@@ -770,11 +810,115 @@ async fn connection_pipeline() -> StrResult {
         }
     }
 
+    fn to_capi_motion(motion: MotionData) -> AlvrMotionData {
+        let has_velocity = motion.linear_velocity.is_some() && motion.angular_velocity.is_some();
+        AlvrMotionData {
+            orientation: to_capi_quat(motion.orientation),
+            position: to_capi_vec3(motion.position),
+            linear_velocity: motion.linear_velocity.map(to_capi_vec3).unwrap_or_default(),
+            angular_velocity: motion
+                .angular_velocity
+                .map(to_capi_vec3)
+                .unwrap_or_default(),
+            has_velocity,
+        }
+    }
+
     let input_receive_loop = {
         let mut receiver = stream_socket.subscribe_to_stream::<Input>(INPUT).await?;
         async move {
+            let mut old_ipd = 0_f32;
+            let mut old_fov = Fov::default();
             loop {
                 let input = receiver.recv().await?.header;
+
+                if let Some(sender) = &*DRIVER_EVENT_SENDER.lock() {
+                    if f32::abs(input.views_config.ipd_m - old_ipd) > f32::EPSILON
+                        || input.views_config.fov[0] != old_fov
+                    {
+                        sender
+                            .send(AlvrEvent {
+                                ty: AlvrEventType::ALVR_EVENT_TYPE_VIEWS_CONFIG_UPDATED,
+                                data: AlvrEventData {
+                                    views_config: AlvrViewsConfig {
+                                        ipd_m: input.views_config.ipd_m,
+                                        fov: [
+                                            AlvrFov {
+                                                left: -input.views_config.fov[0].left / 180.0 * PI,
+                                                right: input.views_config.fov[0].right / 180.0 * PI,
+                                                top: input.views_config.fov[0].top / 180.0 * PI,
+                                                bottom: -input.views_config.fov[0].bottom / 180.0
+                                                    * PI,
+                                            },
+                                            AlvrFov {
+                                                left: -input.views_config.fov[1].left / 180.0 * PI,
+                                                right: input.views_config.fov[1].right / 180.0 * PI,
+                                                top: input.views_config.fov[1].top / 180.0 * PI,
+                                                bottom: -input.views_config.fov[1].bottom / 180.0
+                                                    * PI,
+                                            },
+                                        ],
+                                    },
+                                },
+                            })
+                            .ok();
+
+                        old_ipd = input.views_config.ipd_m;
+                        old_fov = input.views_config.fov[0];
+                    }
+
+                    for (id, motion) in &input.device_motions {
+                        if *id == *HEAD_ID {
+                            sender
+                                .send(AlvrEvent {
+                                    ty: AlvrEventType::ALVR_EVENT_TYPE_DEVICE_POSE_UPDATED,
+                                    data: AlvrEventData {
+                                        device_pose: AlvrDevicePose {
+                                            top_level_path: *id,
+                                            data: to_capi_motion(motion.clone()),
+                                            timestamp_ns: input.target_timestamp.as_nanos() as _,
+                                        },
+                                    },
+                                })
+                                .ok();
+                        }
+                    }
+
+                    // sender
+                    //     .send(AlvrEvent {
+                    //         ty: AlvrEventType::ALVR_EVENT_TYPE_BATTERY_UPDATED,
+                    //         data: AlvrEventData {
+                    //             battery: AlvrBatteryValue {
+                    //                 top_level_path: *HEAD_ID,
+                    //                 value: input.legacy.battery as f32 / 100.0,
+                    //             },
+                    //         },
+                    //     })
+                    //     .ok();
+
+                    // sender
+                    //     .send(AlvrEvent {
+                    //         ty: AlvrEventType::ALVR_EVENT_TYPE_BATTERY_UPDATED,
+                    //         data: AlvrEventData {
+                    //             battery: AlvrBatteryValue {
+                    //                 top_level_path: *LEFT_HAND_ID,
+                    //                 value: input.legacy.controller_battery[0] as f32 / 100.0,
+                    //             },
+                    //         },
+                    //     })
+                    //     .ok();
+                    // sender
+                    //     .send(AlvrEvent {
+                    //         ty: AlvrEventType::ALVR_EVENT_TYPE_BATTERY_UPDATED,
+                    //         data: AlvrEventData {
+                    //             battery: AlvrBatteryValue {
+                    //                 top_level_path: *RIGHT_HAND_ID,
+                    //                 value: input.legacy.controller_battery[0] as f32 / 100.0,
+                    //             },
+                    //         },
+                    //     })
+                    //     .ok();
+                }
 
                 let head_motion = &input
                     .device_motions
@@ -952,15 +1096,18 @@ async fn connection_pipeline() -> StrResult {
                     vec![]
                 };
 
-                unsafe {
-                    crate::SetChaperone(
-                        matrix34_row_major.as_ptr(),
-                        packet.area_width,
-                        packet.area_height,
-                        perimeter_points.as_ptr() as _,
-                        perimeter_points.len() as _,
-                    )
-                };
+                if let Some(sender) = &*DRIVER_EVENT_SENDER.lock() {
+                } else {
+                    unsafe {
+                        crate::SetChaperone(
+                            matrix34_row_major.as_ptr(),
+                            packet.area_width,
+                            packet.area_height,
+                            perimeter_points.as_ptr() as _,
+                            perimeter_points.len() as _,
+                        )
+                    };
+                }
             }
         });
     }
