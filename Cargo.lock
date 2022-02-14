@@ -237,20 +237,10 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "alvr_mock_driver"
 version = "0.1.0"
 dependencies = [
  "alvr_server",
-]
-
-[[package]]
-name = "alvr_mock_driver_old"
-version = "0.1.0"
-dependencies = [
- "alvr_common",
- "alvr_ipc",
 ]
 
 [[package]]
@@ -264,7 +254,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> libalvr
 name = "alvr_server"
 version = "17.0.0-dev.6"
 dependencies = [
@@ -579,6 +568,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "block-buffer"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -588,6 +578,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> libalvr
 name = "bumpalo"
 version = "3.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3398,6 +3390,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "openvr_driver_old"
 version = "0.1.0"
 dependencies = [
@@ -3410,6 +3403,8 @@ dependencies = [
 ]
 
 [[package]]
+>>>>>>> libalvr
+=======
 >>>>>>> libalvr
 name = "openxr"
 version = "0.15.5"

@@ -3,7 +3,7 @@ use std::{env, fs, path::PathBuf};
 
 fn main() {
     let openvr_driver_header_string =
-        fs::read_to_string("../server/cpp/openvr/headers/openvr_driver.h").unwrap();
+        fs::read_to_string("../openvr_driver/cpp/openvr_driver.h").unwrap();
 
     let property_finder = Regex::new(
         r"\tProp_([A-Za-z\d_]+)_(?:Bool|Int32|Uint64|Float|String|Vector3)[\t ]+= ([0-9]+)",
@@ -12,8 +12,8 @@ fn main() {
 
     let mut mappings_fn_string: String = String::from(
         r"#[repr(u32)]
- #[derive(SettingsSchema, Serialize, Deserialize, Clone)]
- pub enum OpenvrPropertyKey {",
+#[derive(SettingsSchema, Serialize, Deserialize, Clone)]
+pub enum OpenvrPropertyKey {",
     );
 
     // Note: this generates disjoint if branches. This is a workaround for MSVC nesting limit of 128
@@ -22,7 +22,7 @@ fn main() {
         if &entry[1] != "HardwareRevision" {
             mappings_fn_string.push_str(&format!(
                 r"
-     {} = {},",
+    {} = {},",
                 &entry[1].replace('_', ""),
                 &entry[2],
             ));
@@ -31,7 +31,7 @@ fn main() {
 
     mappings_fn_string.push_str(
         r"
- }",
+}",
     );
 
     fs::write(

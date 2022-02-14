@@ -4,7 +4,7 @@ use settings_schema::{DictionaryDefault, EntryData, SettingsSchema, Switch, Swit
 
 include!(concat!(env!("OUT_DIR"), "/openvr_property_keys.rs"));
 
-// Field of view in radians
+/// Field of view in radians
 #[derive(SettingsSchema, Serialize, Deserialize, PartialEq, Default, Clone, Copy)]
 pub struct Fov {
     #[schema(min = 0., max = 90., step = 0.1, gui = "UpDown")]
@@ -260,7 +260,7 @@ pub enum OpenvrPropValue {
     String(String),
 }
 
-#[derive(SettingsSchema, Serialize, Deserialize)]
+#[derive(SettingsSchema, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ControllersDesc {
     // Dropdown:

@@ -17,8 +17,7 @@ use alvr_common::{
 };
 use alvr_session::Fov;
 use alvr_sockets::{
-    BatteryPacket, HeadsetInfoPacket, Input, LegacyInput, MotionData, PrivateIdentity,
-    TimeSyncPacket, ViewsConfig,
+    HeadsetInfoPacket, Input, LegacyInput, MotionData, PrivateIdentity, TimeSyncPacket, ViewsConfig,
 };
 use jni::{
     objects::{JClass, JObject, JString},
